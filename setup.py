@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*-mode: python; encoding: utf-8-*-
+#-*- encoding: utf-8; mode: python; grammar-ext: py -*-
 
 #=========================================================================
 """
@@ -73,6 +73,7 @@ with open(ospath_join(_MY_DIR, 'README.rst')) as _readme_file:
     README = _readme_file.read()
 
 __version__ = _namespace.get('__version__')
+__version__ = u'.'.join(( str(i) for i in __version__ )) if __version__ is not None else None
 __release__ = _namespace.get('__release__', __version__)
 
 _SETUP_ARGS = {
@@ -88,7 +89,7 @@ _SETUP_ARGS = {
     # From <http://pypi.python.org/pypi?%3Aaction=list_classifiers>
     'classifiers': (
         'Topic :: Software Development :: Build Tools',
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Environment :: Console',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
@@ -106,7 +107,6 @@ _SETUP_ARGS = {
     'py_modules'          : ( 'dimgx', ),
     'include_package_data': True,
     'install_requires'    : INSTALL_REQUIRES,
-    'test_suite'          : 'tests',
 
     'entry_points': {
         'console_scripts': (

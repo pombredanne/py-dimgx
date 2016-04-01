@@ -1,4 +1,4 @@
-#-*-mode: python; encoding: utf-8-*-
+#-*- encoding: utf-8; mode: python; grammar-ext: py -*-
 
 #=========================================================================
 """
@@ -20,9 +20,8 @@
 from __future__ import (
     absolute_import, division, print_function, unicode_literals,
 )
-
-from builtins import * # pylint: disable=redefined-builtin,unused-wildcard-import,wildcard-import
-from future.builtins.disabled import * # pylint: disable=redefined-builtin,unused-wildcard-import,wildcard-import
+from builtins import * # pylint: disable=redefined-builtin,unused-wildcard-import,useless-suppression,wildcard-import
+from future.builtins.disabled import * # pylint: disable=redefined-builtin,unused-wildcard-import,useless-suppression,wildcard-import
 
 #---- Imports ------------------------------------------------------------
 
@@ -69,8 +68,8 @@ from sys import (
     stdout,
 )
 from tarfile import open as tarfile_open
-from docker import Client
-from docker.utils.utils import DEFAULT_UNIX_SOCKET as DOCKER_DEFAULT_UNIX_SOCKET
+from docker import AutoVersionClient
+from docker.utils import kwargs_from_env
 from humanize import naturalsize
 from dimgx import (
     inspectlayers,
@@ -80,12 +79,16 @@ from _dimgx import (
     logexception,
     naturaltime,
 )
+from _dimgx.version import __release__
 
 #---- Constants ----------------------------------------------------------
 
 __all__ = ()
 
-_LOGGER = getLogger(__name__)
+DOCKER_TLS_VERIFY = environ.get('DOCKER_TLS_VERIFY', None)
+DOCKER_TLS_VERIFY = DOCKER_TLS_VERIFY if DOCKER_TLS_VERIFY else None
+
+_LOGGER = getLogger(__name__.lstrip('_'))
 _LAYER_RE_STR = r'(?:[0-9A-Fa-f]{1,64})'
 _LAYER_SPEC_RE = re_compile(r'^(?P<l>{layer_re})(?::(?P<r>{layer_re}))?$'.format(layer_re=_LAYER_RE_STR), IGNORECASE)
 _TARGET_STDOUT = '-'
@@ -143,8 +146,9 @@ def exitonraise(f):
 #---- Functions ----------------------------------------------------------
 
 #=========================================================================
-def buildparser():
-    parser = ArgumentParser(description=_DESCRIPTION, epilog=_EPILOG, usage=_USAGE)
+def buildparser(cls=ArgumentParser):
+    parser = cls(description=_DESCRIPTION, epilog=_EPILOG, usage=_USAGE)
+    parser.add_argument('-V', '--version', action='version', version='%(prog)s {}'.format(__release__))
     parser.add_argument('image', help='the name or ID of the Docker image', metavar='IMAGE_SPEC')
 
     layer_group = parser.add_argument_group(description=_LAYER_GROUP_DESCRIPTION)
@@ -160,11 +164,6 @@ def buildparser():
     target_group.add_argument('-Q', '--no-quiet', action='store_false', dest='quiet', help='when no target is specified, print the image IDs with additional information in a table (default)')
     target_group.add_argument('-w', '--force', action='store_true', dest='force', help='overwrite the target archive if it already exists')
     target_group.add_argument('-W', '--no-force', action='store_false', dest='force', help='don\'t overwrite the target archive if it already exists (default)')
-
-    environ_docker_host = environ.get('DOCKER_HOST')
-    docker_host = environ_docker_host if environ_docker_host else DOCKER_DEFAULT_UNIX_SOCKET
-    docker_group = parser.add_argument_group()
-    docker_group.add_argument('-d', '--docker-host', default=docker_host, help='the Docker host URI (defaults to "{}" or DOCKER_HOST, if set)'.format(DOCKER_DEFAULT_UNIX_SOCKET.replace('%', '%%')), metavar='URI')
 
     compress_group = parser.add_argument_group()
     compress_group.add_argument('-j', '--bzip2', action='store_const', const=_CMP_BZIP2, dest='compression', help='compress the target archive with bzip2 compression')
@@ -263,7 +262,13 @@ def main():
     args = buildparser().parse_args(sys_argv[1:])
     logging_basicConfig(format=args.log_format)
     getLogger().setLevel(logging_getLevelName(args.log_level))
-    dc = Client(args.docker_host)
+    dc_kw = kwargs_from_env()
+
+    # TODO: hack to work around github:docker/docker-py#706
+    if DOCKER_TLS_VERIFY == '0':
+        dc_kw['tls'].assert_hostname = False
+
+    dc = AutoVersionClient(**dc_kw)
     layers_dict = inspectlayers(dc, args.image)
     top_most_layer_id, selected_layers = selectlayers(args, layers_dict)
 

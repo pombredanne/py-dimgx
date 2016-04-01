@@ -1,4 +1,4 @@
-#-*-mode: python; encoding: utf-8-*-
+#-*- encoding: utf-8; mode: python; grammar-ext: py -*-
 
 #=========================================================================
 """
@@ -25,5 +25,5 @@ from __future__ import (
 
 __all__ = ()
 
-__version__ = 'master'
+__version__ = ( 'master', )
 __release__ = 'master'

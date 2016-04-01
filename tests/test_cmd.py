@@ -1,4 +1,4 @@
-#-*-mode: python; encoding: utf-8-*-
+#-*- encoding: utf-8; mode: python; grammar-ext: py -*-
 
 #=========================================================================
 """
@@ -20,20 +20,21 @@
 from __future__ import (
     absolute_import, division, print_function, unicode_literals,
 )
-
-from builtins import * # pylint: disable=redefined-builtin,unused-wildcard-import,wildcard-import
-from future.builtins.disabled import * # pylint: disable=redefined-builtin,unused-wildcard-import,wildcard-import
-# pylint: disable=missing-super-argument
+from builtins import * # pylint: disable=redefined-builtin,unused-wildcard-import,useless-suppression,wildcard-import
+from future.builtins.disabled import * # pylint: disable=redefined-builtin,unused-wildcard-import,useless-suppression,wildcard-import
 
 #---- Imports ------------------------------------------------------------
 
+from argparse import ArgumentParser
 from io import StringIO
+from os import linesep
 from unittest import TestCase
 from _dimgx.cmd import (
     buildparser,
     printlayerinfo,
     selectlayers,
 )
+from _dimgx.version import __release__
 from dimgx import inspectlayers
 from tests.fauxdockerclient import FauxDockerClient
 
@@ -44,19 +45,47 @@ __all__ = ()
 #---- Classes ------------------------------------------------------------
 
 #=========================================================================
+class FakeSystemExit(Exception):
+    pass
+
+#=========================================================================
+class FakeExitingArgumentParser(ArgumentParser):
+
+    #---- Constructor ----------------------------------------------------
+
+    def __init__(self, *args, **kw):
+        ArgumentParser.__init__(self, *args, **kw)
+        self.buf = StringIO()
+
+    #---- Public hooks ---------------------------------------------------
+
+    def exit(self, status=0, message=None):
+        try:
+            return ArgumentParser.exit(self, status, message)
+        except SystemExit:
+            raise FakeSystemExit(status)
+
+    #---- Private hooks --------------------------------------------------
+
+    def _print_message(self, message, file=None): # pylint: disable=redefined-outer-name
+        return ArgumentParser._print_message(self, message, self.buf)
+
+#=========================================================================
 class CommandTestCase(TestCase):
 
-    #---- Public hook methods --------------------------------------------
+    #---- Public hooks ---------------------------------------------------
 
-    #=====================================================================
     def setUp(self):
         super().setUp()
         self.longMessage = True
         self.maxDiff = None
-        self._parser = buildparser()
+        self._parser = buildparser(FakeExitingArgumentParser)
         self._dc = FauxDockerClient()
 
-    #=====================================================================
+    def tearDown(self):
+        super().tearDown()
+        self._parser.buf.close()
+
     def test_layerspecs(self):
         path_ids = FauxDockerClient.SHORT_IDS_BY_PATH[0]
         image_spec = '52d7263f000f'
@@ -167,6 +196,21 @@ class CommandTestCase(TestCase):
             printlayerinfo(args, selected_layers, outfile)
             outfile.seek(0)
             self.assertEqual([ l.strip() for l in outfile ], layer_ids)
+
+    def test_version(self):
+        try:
+            self._parser.parse_args(( '-V', ))
+        except FakeSystemExit:
+            self.assertTrue(self._parser.buf.getvalue().endswith(' ' + __release__ + linesep))
+        else:
+            self.assertFail('-V did not cause exit')
+
+        try:
+            self._parser.parse_args(( '--version', ))
+        except FakeSystemExit:
+            self.assertTrue(self._parser.buf.getvalue().endswith(' ' + __release__ + linesep))
+        else:
+            self.assertFail('--version did not cause exit')
 
 #---- Initialization -----------------------------------------------------
 
